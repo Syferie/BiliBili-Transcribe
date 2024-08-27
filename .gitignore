@@ -1,0 +1,99 @@
+# Python 虚拟环境
+venv/
+env/
+*.venv
+*.virtualenv
+
+# Node.js 依赖
+frontend/node_modules/
+
+# Python 字节码
+__pycache__/
+*.py[cod]
+*$py.class
+
+# 日志文件
+*.log
+
+# 操作系统生成的文件
+.DS_Store
+Thumbs.db
+
+# 编辑器/IDE 特定文件
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 编译文件
+*.com
+*.class
+*.dll
+*.exe
+*.o
+*.so
+
+# 包文件
+*.7z
+*.dmg
+*.gz
+*.iso
+*.jar
+*.rar
+*.tar
+*.zip
+
+# 数据库文件
+*.sqlite3
+*.db
+
+# 环境变量文件（可能包含敏感信息）
+.env
+.env.local
+.env.*.local
+
+# 前端构建输出
+frontend/build/
+frontend/dist/
+
+# 后端静态文件收集目录（如果适用）
+static/
+
+# 媒体文件（用户上传等）
+media/
+
+# 临时文件
+*.tmp
+*.bak
+*.swp
+*~.nib
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+
+# pipenv
+Pipfile.lock
+
+# poetry
+poetry.lock
+
+# coverage reports
+htmlcov/
+.coverage
+.coverage.*
+.cache
+
+# mypy
+.mypy_cache/
+
+# pytest
+.pytest_cache/
+
+# Sphinx 文档
+docs/_build/
+
+# PyBuilder
+target/
