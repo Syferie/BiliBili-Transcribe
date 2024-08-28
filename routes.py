@@ -1,6 +1,6 @@
 from flask import request, jsonify, send_file, after_this_request
 from .services import download_bilibili_audio, transcribe_audio, cleanup_files
-from .utils import update_progress, get_progress_info, validate_bv_id
+from .utils import update_progress, get_progress_info, validate_bv_id, get_enabled_transcribers
 from .subtitle_utils import generate_srt
 import tempfile
 import os
@@ -167,6 +167,11 @@ def register_routes(app):
                     logger.error(f"Error removing temporary file after exception: {str(cleanup_error)}")
             return jsonify({'error': f'生成 SRT 文件时发生错误: {str(e)}'}), 500
 
+    @app.route('/api/enabled_transcribers', methods=['GET'])
+    def get_enabled_transcribers_route():
+        enabled_transcribers = get_enabled_transcribers()
+        return jsonify(enabled_transcribers)
+        
 def init_app(app):
     app.logger.handlers = logger.handlers
     app.logger.setLevel(logger.level)

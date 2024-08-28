@@ -82,3 +82,10 @@ def save_srt(content, filename):
 def create_direct_connection():
     import httpx
     return httpx.HTTPTransport(proxy=None)
+
+def get_enabled_transcribers():
+    return {
+        'faster_whisper': os.getenv('ENABLE_LOCAL_FASTER_WHISPER', 'true').lower() == 'true',
+        'openai': os.getenv('ENABLE_OPENAI_WHISPER', 'true').lower() == 'true',
+        'cloud_faster_whisper': os.getenv('ENABLE_CLOUD_FASTER_WHISPER', 'true').lower() == 'true'
+    }

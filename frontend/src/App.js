@@ -5,7 +5,8 @@ import {
   Card, CardContent, Divider, Chip, useMediaQuery, 
   List, ListItem, ListItemText, Dialog, DialogTitle, DialogContent,
   DialogActions, Alert, Select, MenuItem, FormControl, InputLabel,
-  Pagination, Checkbox, ListItemIcon, ListItemButton, ListItemSecondaryAction
+  Pagination, Checkbox, ListItemIcon, ListItemButton, ListItemSecondaryAction,
+  FormHelperText // 添加这一行
 } from '@mui/material';
 import { createTheme, ThemeProvider, useTheme } from '@mui/material/styles';
 import { 
@@ -91,7 +92,7 @@ const TranscriptSentence = ({ sentence, index }) => {
 
 function App() {
   const [mode, setMode] = useState('light');
-  const [transcriberType, setTranscriberType] = useState('faster_whisper');
+  const [transcriberType, setTranscriberType] = useState('');
   const [exportingSrt, setExportingSrt] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [searchTerm, setSearchTerm] = useState('');
@@ -198,6 +199,29 @@ function App() {
     setHistory(validHistory);
   }, []);
 
+
+  const [enabledTranscribers, setEnabledTranscribers] = useState({});
+  
+  useEffect(() => {
+    fetch('/api/enabled_transcribers')
+      .then(response => response.json())
+      .then(data => {
+        setEnabledTranscribers(data);
+        // 设置默认的转写服务
+        const firstEnabledTranscriber = Object.keys(data).find(key => data[key]);
+        if (firstEnabledTranscriber) {
+          setTranscriberType(firstEnabledTranscriber);
+        }
+      })
+      .catch(error => {
+        console.error('Error fetching enabled transcribers:', error);
+        setError('无法获取可用的转写服务');
+      });
+  }, []);
+
+  // 在 Select 组件中添加错误处理和禁用逻辑
+  const noEnabledTranscribers = Object.values(enabledTranscribers).every(value => !value);
+  
   const saveHistory = (newHistory) => {
     localStorage.setItem('transcriptionHistory', JSON.stringify(newHistory));
     setHistory(newHistory);
@@ -462,18 +486,28 @@ function App() {
                         startAdornment: <SubtitlesIcon color="action" sx={{ mr: 1 }} />,
                       }}
                     />
-                    <FormControl fullWidth margin="normal">
+                    <FormControl fullWidth margin="normal" error={noEnabledTranscribers}>
                       <InputLabel id="transcriber-type-label">转写服务</InputLabel>
                       <Select
                         labelId="transcriber-type-label"
                         value={transcriberType}
                         onChange={(e) => setTranscriberType(e.target.value)}
                         label="转写服务"
+                        disabled={noEnabledTranscribers}
                       >
-                        <MenuItem value="faster_whisper">本地 Faster Whisper</MenuItem>
-                        <MenuItem value="openai">OpenAI Whisper</MenuItem>
-                        <MenuItem value="cloud_faster_whisper">云端 Faster Whisper</MenuItem>
+                        {enabledTranscribers.faster_whisper && (
+                          <MenuItem value="faster_whisper">本地 Faster Whisper</MenuItem>
+                        )}
+                        {enabledTranscribers.openai && (
+                          <MenuItem value="openai">OpenAI Whisper</MenuItem>
+                        )}
+                        {enabledTranscribers.cloud_faster_whisper && (
+                          <MenuItem value="cloud_faster_whisper">云端 Faster Whisper</MenuItem>
+                        )}
                       </Select>
+                      {noEnabledTranscribers && (
+                        <FormHelperText>没有可用的转写服务</FormHelperText>
+                      )}
                     </FormControl>
                     <Button 
                       type="submit" 

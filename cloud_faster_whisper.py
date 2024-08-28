@@ -15,6 +15,7 @@ class CloudFasterWhisperTranscriber:
     def __init__(self):
         self.use_proxy = os.getenv('USE_PROXY', 'False').lower() == 'true'
         self.proxy_url = os.getenv('PROXY_URL', 'http://127.0.0.1:7890')
+        self.huggingface_space = os.getenv('HUGGINGFACE_SPACE', 'magicsif/fasterwhisper')
         
         if self.use_proxy:
             self.original_http_proxy = os.environ.get('HTTP_PROXY')
@@ -24,12 +25,12 @@ class CloudFasterWhisperTranscriber:
 
         for attempt in range(3):
             try:
-                self.client = Client("magicsif/fasterwhisper")
+                self.client = Client(self.huggingface_space)
                 break
             except Exception as e:
                 if attempt == 2:
                     self._restore_proxy_settings()
-                    raise Exception(f"无法连接到 Hugging Face 空间: {str(e)}")
+                    raise Exception(f"无法连接到 Hugging Face 空间 {self.huggingface_space}: {str(e)}")
                 time.sleep(5)
 
     def transcribe(self, audio_filename: str, language: str = "zh", initial_prompt: str = "以下是普通话的句子。", vad_filter: bool = True, min_silence_duration_ms: int = 500) -> List[Dict[str, Union[float, str]]]:
