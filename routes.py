@@ -1,36 +1,14 @@
-from flask import request, jsonify, send_file, after_this_request
+import os
+import tempfile
+import logging
+from threading import Timer
+from flask import request, jsonify, send_file, after_this_request, current_app
 from .services import download_bilibili_audio, transcribe_audio, cleanup_files
 from .utils import update_progress, get_progress_info, validate_bv_id, get_enabled_transcribers, get_max_video_duration
 from .subtitle_utils import generate_srt
-import tempfile
-import os
-import logging
-import time
-import os
-import tempfile
-import time
-from flask import jsonify, send_file, after_this_request, current_app
-from werkzeug.datastructures import Headers
-from .subtitle_utils import generate_srt
-import threading
-import os
-import tempfile
-import time
-from flask import jsonify, send_file, current_app, request
-from .subtitle_utils import generate_srt
-import logging
-import atexit
-from threading import Timer
-from flask import request, jsonify, send_file, after_this_request, current_app
-from .subtitle_utils import generate_srt
-import tempfile
-import os
-import logging
 
 # 设置日志
 logging.basicConfig(level=logging.INFO)
-
-# 确保在模块级别定义 logger
 logger = logging.getLogger(__name__)
 
 # 存储需要删除的临时文件
@@ -58,8 +36,6 @@ def cleanup_temp_files():
             logger.error(f"Cleanup: failed to remove temporary file: {filename}. Error: {str(e)}")
     temp_files_to_delete.clear()
 
-atexit.register(cleanup_temp_files)
-
 def register_routes(app):
     @app.route('/api/transcribe', methods=['POST'])
     def transcribe():
@@ -71,7 +47,7 @@ def register_routes(app):
             return jsonify({'error': str(e), 'code': 'INVALID_BV_ID'}), 400
         
         update_progress(bv_number, '开始处理')
-        duration = None  # 初始化 duration 变量
+        duration = None
         try:
             bvid, title, audio_filename, duration = download_bilibili_audio(bv_number)
             
@@ -93,12 +69,7 @@ def register_routes(app):
             cleanup_files(audio_filename)
             update_progress(bv_number, '处理完成')
             
-            # 如果是云端 Faster Whisper，保持原样返回
-            if transcriber_type == 'cloud_faster_whisper':
-                formatted_transcript = transcript
-            else:
-                # 对于本地 Faster Whisper，保持原有的格式
-                formatted_transcript = transcript
+            formatted_transcript = transcript
             
             return jsonify({
                 'transcript': formatted_transcript,
@@ -150,11 +121,8 @@ def register_routes(app):
 
     @app.route('/api/export_srt', methods=['POST'])
     def export_srt():
-        # 使用模块级别的 logger，而不是尝试重新定义它
         logger.info("Received request to export SRT")
         data = request.json
-        logger.debug(f"Received data: {data}")
-        
         transcript = data.get('transcript')
         video_title = data.get('videoTitle')
         
@@ -162,28 +130,18 @@ def register_routes(app):
             logger.error("Missing required data for SRT export")
             return jsonify({'error': '缺少必要的数据'}), 400
         
-        temp_filename = None
         try:
-            logger.info("Generating SRT content")
             srt_content = generate_srt(transcript)
-            logger.debug(f"Generated SRT content: {srt_content[:100]}...")  # Log first 100 characters
             
             with tempfile.NamedTemporaryFile(mode='w+', delete=False, suffix='.srt', encoding='utf-8-sig') as temp_file:
                 temp_filename = temp_file.name
-                logger.info(f"Saving SRT to temporary file: {temp_filename}")
                 temp_file.write(srt_content)
             
             @after_this_request
             def remove_file(response):
-                try:
-                    if temp_filename and os.path.exists(temp_filename):
-                        logger.info(f"Cleaning up temporary file: {temp_filename}")
-                        os.remove(temp_filename)
-                except Exception as e:
-                    logger.error(f"Error removing temporary file: {str(e)}")
+                delayed_file_delete(temp_filename)
                 return response
 
-            logger.info(f"Sending file: {temp_filename}")
             return send_file(
                 temp_filename, 
                 as_attachment=True, 
@@ -192,11 +150,6 @@ def register_routes(app):
             )
         except Exception as e:
             logger.exception(f"Error occurred while generating SRT file: {str(e)}")
-            if temp_filename and os.path.exists(temp_filename):
-                try:
-                    os.remove(temp_filename)
-                except Exception as cleanup_error:
-                    logger.error(f"Error removing temporary file after exception: {str(cleanup_error)}")
             return jsonify({'error': f'生成 SRT 文件时发生错误: {str(e)}'}), 500
 
     @app.route('/api/enabled_transcribers', methods=['GET'])
