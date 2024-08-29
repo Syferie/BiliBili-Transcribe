@@ -274,15 +274,30 @@ function App() {
     }
   };
 
+  const [retryCountdown, setRetryCountdown] = useState(0);
+
+  const startRetryCountdown = (seconds) => {
+    setRetryCountdown(seconds);
+    const countdownInterval = setInterval(() => {
+      setRetryCountdown((prevCountdown) => {
+        if (prevCountdown <= 1) {
+          clearInterval(countdownInterval);
+          return 0;
+        }
+        return prevCountdown - 1;
+      });
+    }, 1000);
+  };
+  
   const handleSubmit = async (e) => {
     e.preventDefault();
-
+  
     if (!/^BV[a-zA-Z0-9]{10}$/.test(bvId)) {
       setError('无效的BV号格式');
       setErrorDetails('请输入正确的BV号，格式为BV开头后跟10个字母或数字');
       return;
     }
-
+  
     setLoading(true);
     setError('');
     setErrorDetails('');
@@ -290,7 +305,7 @@ function App() {
     setVideoTitle('');
     setStatus('开始处理');
     startProgressEstimation(estimatedTime);
-
+  
     try {
       const response = await fetch('/api/transcribe', {
         method: 'POST',
@@ -299,19 +314,27 @@ function App() {
         },
         body: JSON.stringify({ bvId, transcriber_type: transcriberType }),
       });
-
+  
       const data = await response.json();
-
+  
       if (!response.ok) {
-        setError(data.error);
-        setErrorDetails(data.details);
+        if (response.status === 429) {
+          // 处理速率限制错误
+          setError('速率限制');
+          setErrorDetails(`请求过于频繁，请在 ${data.retryAfter} 秒后重试。`);
+          startRetryCountdown(data.retryAfter);
+        } else {
+          // 处理其他错误
+          setError(data.error);
+          setErrorDetails(data.details);
+        }
         throw new Error(data.error);
       }
-
+  
       const newEstimatedTime = calculateEstimatedTime(data.duration);
       setEstimatedTime(newEstimatedTime);
       updateProgressEstimation(newEstimatedTime);
-
+  
       const formattedTranscript = Array.isArray(data.transcript) ? data.transcript : [{
         text: data.transcript,
         start: 0,
@@ -320,7 +343,7 @@ function App() {
       setTranscript(formattedTranscript);
       setVideoTitle(data.title);
       setShowSnackbar(true);
-
+  
       const newEntry = {
         id: Date.now(),
         bvId,
@@ -331,7 +354,7 @@ function App() {
         transcript: formattedTranscript
       };
       addToHistory(newEntry);
-
+  
       pollProgress(bvId);
     } catch (err) {
       console.error('Error during transcription:', err);
@@ -527,16 +550,17 @@ function App() {
                       )}
                     </FormControl>
                     <Button 
-                      type="submit" 
-                      variant="contained" 
-                      color="primary"
-                      disabled={loading}
-                      fullWidth
-                      size="large"
-                      sx={{ mt: 2 }}
-                    >
-                      {loading ? <CircularProgress size={24} /> : '获取字幕'}
-                    </Button>
+                    type="submit" 
+                    variant="contained" 
+                    color="primary"
+                    disabled={loading || retryCountdown > 0}
+                    fullWidth
+                    size="large"
+                    sx={{ mt: 2 }}
+                  >
+                    {loading ? <CircularProgress size={24} /> : 
+                    retryCountdown > 0 ? `请等待 ${retryCountdown} 秒` : '获取字幕'}
+                  </Button>
                   </form>
                   {loading && (
                     <Box sx={{ mt: 2, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -572,6 +596,18 @@ function App() {
                         <Typography variant="body2" sx={{ mt: 1 }}>
                           转录服务可能暂时不可用。请稍后再试，如果问题持续，请联系管理员。
                         </Typography>
+                      )}
+                      {error === '速率限制' && (
+                        <>
+                          <Typography variant="body2" sx={{ mt: 1 }}>
+                            为了保证服务质量，我们限制了请求频率。请稍后再试。
+                          </Typography>
+                          {retryCountdown > 0 && (
+                            <Typography variant="body2" sx={{ mt: 1 }}>
+                              下次可请求时间：{retryCountdown} 秒
+                            </Typography>
+                          )}
+                        </>
                       )}
                     </Alert>
                   )}

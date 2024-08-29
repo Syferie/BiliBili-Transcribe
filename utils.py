@@ -92,3 +92,6 @@ def get_enabled_transcribers():
 
 def get_max_video_duration():
     return int(os.getenv('MAX_VIDEO_DURATION', 3600))  # 默认为1小时
+
+def get_rate_limit_seconds():
+    return os.getenv('RATE_LIMIT_SECONDS', '30')

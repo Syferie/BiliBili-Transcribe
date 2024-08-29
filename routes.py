@@ -6,7 +6,11 @@ from flask import request, jsonify, send_file, after_this_request, current_app
 from .services import download_bilibili_audio, transcribe_audio, cleanup_files
 from .utils import update_progress, get_progress_info, validate_bv_id, get_enabled_transcribers, get_max_video_duration
 from .subtitle_utils import generate_srt
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from .utils import get_rate_limit_seconds
 
+limiter = Limiter(key_func=get_remote_address)
 # 设置日志
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -38,6 +42,7 @@ def cleanup_temp_files():
 
 def register_routes(app):
     @app.route('/api/transcribe', methods=['POST'])
+    @limiter.limit(f"{get_rate_limit_seconds()} seconds")
     def transcribe():
         data = request.json
         try:
