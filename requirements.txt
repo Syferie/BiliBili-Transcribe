@@ -1,0 +1,12 @@
+flask
+flask-cors
+flask-limiter
+python-dotenv
+yt-dlp
+faster-whisper
+openai
+httpx
+gradio-client
+tenacity
+requests
+urllib3
