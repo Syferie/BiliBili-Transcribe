@@ -137,9 +137,13 @@ function App() {
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
 
   const [progress, setProgress] = useState(0);
-  const [estimatedTime, setEstimatedTime] = useState(20);
+  const [estimatedTime, setEstimatedTime] = useState(45); // 默认估计时间为60秒
   const startTimeRef = useRef(null);
   const progressIntervalRef = useRef(null);
+
+  // 删除 maxDuration 状态，因为它在当前代码中并未使用
+  const [error, setError] = useState('');
+  const [errorDetails, setErrorDetails] = useState('');
 
   const handleHistoryItemClick = (item) => {
     setBvId(item.bvId);
@@ -244,21 +248,24 @@ function App() {
   };
 
   const calculateEstimatedTime = (duration) => {
-    // 假设处理时间与视频时长成线性关系
-    const processingRatio = 80 / 210; // 80秒处理时间 / 210秒视频时长
+    const processingRatio = 80 / 210;
     const estimatedSeconds = duration * processingRatio;
-    // 添加一些缓冲时间，最少20秒
     return Math.max(20, Math.ceil(estimatedSeconds) + 10);
   };
-  
-  const startProgressEstimation = () => {
+
+  const startProgressEstimation = (initialEstimate) => {
     startTimeRef.current = Date.now();
     setProgress(0);
     progressIntervalRef.current = setInterval(() => {
       const elapsedTime = (Date.now() - startTimeRef.current) / 1000;
-      const newProgress = Math.min((elapsedTime / estimatedTime) * 100, 99);
+      const newProgress = Math.min((elapsedTime / initialEstimate) * 100, 99);
       setProgress(newProgress);
     }, 100);
+  };
+
+  const updateProgressEstimation = (newEstimate) => {
+    clearInterval(progressIntervalRef.current);
+    startProgressEstimation(newEstimate);
   };
 
   const stopProgressEstimation = () => {
@@ -267,29 +274,23 @@ function App() {
     }
   };
 
-  const [error, setError] = useState('');
-  const [errorDetails, setErrorDetails] = useState('');
-  const [maxDuration, setMaxDuration] = useState(null);
-  const [videoDuration, setVideoDuration] = useState(null);
-  
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    // 简单的BV号格式检查
+
     if (!/^BV[a-zA-Z0-9]{10}$/.test(bvId)) {
       setError('无效的BV号格式');
       setErrorDetails('请输入正确的BV号，格式为BV开头后跟10个字母或数字');
       return;
     }
-  
+
     setLoading(true);
     setError('');
     setErrorDetails('');
     setTranscript('');
     setVideoTitle('');
     setStatus('开始处理');
-    startProgressEstimation();
-  
+    startProgressEstimation(estimatedTime);
+
     try {
       const response = await fetch('/api/transcribe', {
         method: 'POST',
@@ -298,35 +299,28 @@ function App() {
         },
         body: JSON.stringify({ bvId, transcriber_type: transcriberType }),
       });
-  
+
       const data = await response.json();
+
       if (!response.ok) {
         setError(data.error);
         setErrorDetails(data.details);
-        if (data.code === 'DURATION_EXCEEDED') {
-          setMaxDuration(data.maxDuration);
-          setVideoDuration(data.videoDuration);
-        }
         throw new Error(data.error);
       }
-      
-      console.log("Received data:", data);
 
-      const calculatedEstimatedTime = calculateEstimatedTime(data.duration);
-      setEstimatedTime(calculatedEstimatedTime);
+      const newEstimatedTime = calculateEstimatedTime(data.duration);
+      setEstimatedTime(newEstimatedTime);
+      updateProgressEstimation(newEstimatedTime);
 
-      // 确保 transcript 是一个数组，每个元素包含 text, start, 和 end
       const formattedTranscript = Array.isArray(data.transcript) ? data.transcript : [{
         text: data.transcript,
         start: 0,
         end: data.duration || 0
       }];
       setTranscript(formattedTranscript);
-
       setVideoTitle(data.title);
       setShowSnackbar(true);
-      
-      // 添加到历史记录
+
       const newEntry = {
         id: Date.now(),
         bvId,
@@ -334,7 +328,7 @@ function App() {
         transcriberType,
         createdAt: new Date().toISOString(),
         tags: [],
-        transcript: formattedTranscript  // 保存完整的转录内容
+        transcript: formattedTranscript
       };
       addToHistory(newEntry);
 
