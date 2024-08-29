@@ -89,3 +89,6 @@ def get_enabled_transcribers():
         'openai': os.getenv('ENABLE_OPENAI_WHISPER', 'true').lower() == 'true',
         'cloud_faster_whisper': os.getenv('ENABLE_CLOUD_FASTER_WHISPER', 'true').lower() == 'true'
     }
+
+def get_max_video_duration():
+    return int(os.getenv('MAX_VIDEO_DURATION', 3600))  # 默认为1小时

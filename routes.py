@@ -1,6 +1,6 @@
 from flask import request, jsonify, send_file, after_this_request
 from .services import download_bilibili_audio, transcribe_audio, cleanup_files
-from .utils import update_progress, get_progress_info, validate_bv_id, get_enabled_transcribers
+from .utils import update_progress, get_progress_info, validate_bv_id, get_enabled_transcribers, get_max_video_duration
 from .subtitle_utils import generate_srt
 import tempfile
 import os
@@ -68,15 +68,24 @@ def register_routes(app):
             bv_number = validate_bv_id(data['bvId'])
             transcriber_type = data.get('transcriber_type', 'faster_whisper')
         except ValueError as e:
-            return jsonify({'error': str(e)}), 400
+            return jsonify({'error': str(e), 'code': 'INVALID_BV_ID'}), 400
         
         update_progress(bv_number, '开始处理')
-        bvid, title, audio_filename, duration = download_bilibili_audio(bv_number)
-        if not audio_filename or not os.path.exists(audio_filename):
-            return jsonify({'error': '音频下载失败或文件不存在'}), 400
-
-        update_progress(bv_number, '开始音频转写')
+        duration = None  # 初始化 duration 变量
         try:
+            bvid, title, audio_filename, duration = download_bilibili_audio(bv_number)
+            
+            if duration is None:
+                raise ValueError('无法获取视频时长')
+
+            max_duration = get_max_video_duration()
+            if duration > max_duration:
+                raise ValueError(f"视频时长 ({duration}秒) 超过允许的最大时长 ({max_duration}秒)")
+
+            if not audio_filename or not os.path.exists(audio_filename):
+                raise ValueError('音频下载失败或文件不存在')
+
+            update_progress(bv_number, '开始音频转写')
             transcript = transcribe_audio(audio_filename, transcriber_type)
             if transcript is None:
                 raise Exception("转写失败")
@@ -97,11 +106,34 @@ def register_routes(app):
                 'bvId': bv_number,
                 'duration': duration
             })
+
+        except ValueError as e:
+            error_message = str(e)
+            if "视频时长" in error_message:
+                return jsonify({
+                    'error': '视频时长超出限制',
+                    'details': error_message,
+                    'code': 'DURATION_EXCEEDED',
+                    'maxDuration': get_max_video_duration(),
+                    'videoDuration': duration if duration is not None else 0
+                }), 400
+            else:
+                return jsonify({
+                    'error': '下载失败',
+                    'details': error_message,
+                    'code': 'DOWNLOAD_FAILED'
+                }), 400
+
         except Exception as e:
-            cleanup_files(audio_filename)
+            if 'audio_filename' in locals() and audio_filename:
+                cleanup_files(audio_filename)
             error_message = f"转写失败: {str(e)}"
             update_progress(bv_number, '转写失败', error_message)
-            return jsonify({'error': error_message}), 500
+            return jsonify({
+                'error': '转录过程中发生错误',
+                'details': error_message,
+                'code': 'TRANSCRIPTION_FAILED'
+            }), 500
 
     @app.route('/api/progress', methods=['GET'])
     def get_transcription_progress():

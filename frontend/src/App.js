@@ -4,9 +4,9 @@ import {
   Container, AppBar, Toolbar, IconButton, Snackbar, Fade, Grow,
   Card, CardContent, Divider, Chip, useMediaQuery, 
   List, ListItem, ListItemText, Dialog, DialogTitle, DialogContent,
-  DialogActions, Alert, Select, MenuItem, FormControl, InputLabel,
+  DialogActions, Alert, AlertTitle, Select, MenuItem, FormControl, InputLabel,
   Pagination, Checkbox, ListItemIcon, ListItemButton, ListItemSecondaryAction,
-  FormHelperText // 添加这一行
+  FormHelperText
 } from '@mui/material';
 import { createTheme, ThemeProvider, useTheme } from '@mui/material/styles';
 import { 
@@ -128,7 +128,6 @@ function App() {
   const [transcript, setTranscript] = useState('');
   const [videoTitle, setVideoTitle] = useState('');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
   const [showSnackbar, setShowSnackbar] = useState(false);
   const [copied, setCopied] = useState(false);
   const [history, setHistory] = useState([]);
@@ -245,8 +244,11 @@ function App() {
   };
 
   const calculateEstimatedTime = (duration) => {
-    const estimatedSeconds = (duration / 180) * 25;
-    return Math.max(20, estimatedSeconds);
+    // 假设处理时间与视频时长成线性关系
+    const processingRatio = 80 / 210; // 80秒处理时间 / 210秒视频时长
+    const estimatedSeconds = duration * processingRatio;
+    // 添加一些缓冲时间，最少20秒
+    return Math.max(20, Math.ceil(estimatedSeconds) + 10);
   };
   
   const startProgressEstimation = () => {
@@ -265,16 +267,29 @@ function App() {
     }
   };
 
-  // 修改 handleSubmit 函数
+  const [error, setError] = useState('');
+  const [errorDetails, setErrorDetails] = useState('');
+  const [maxDuration, setMaxDuration] = useState(null);
+  const [videoDuration, setVideoDuration] = useState(null);
+  
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    // 简单的BV号格式检查
+    if (!/^BV[a-zA-Z0-9]{10}$/.test(bvId)) {
+      setError('无效的BV号格式');
+      setErrorDetails('请输入正确的BV号，格式为BV开头后跟10个字母或数字');
+      return;
+    }
+  
     setLoading(true);
     setError('');
+    setErrorDetails('');
     setTranscript('');
     setVideoTitle('');
     setStatus('开始处理');
     startProgressEstimation();
-
+  
     try {
       const response = await fetch('/api/transcribe', {
         method: 'POST',
@@ -283,13 +298,15 @@ function App() {
         },
         body: JSON.stringify({ bvId, transcriber_type: transcriberType }),
       });
-
-      if (!response.ok) {
-        throw new Error('转写请求失败');
-      }
-
+  
       const data = await response.json();
-      if (data.error) {
+      if (!response.ok) {
+        setError(data.error);
+        setErrorDetails(data.details);
+        if (data.code === 'DURATION_EXCEEDED') {
+          setMaxDuration(data.maxDuration);
+          setVideoDuration(data.videoDuration);
+        }
         throw new Error(data.error);
       }
       
@@ -323,7 +340,7 @@ function App() {
 
       pollProgress(bvId);
     } catch (err) {
-      setError(err.message || '发生未知错误');
+      console.error('Error during transcription:', err);
       stopProgressEstimation();
     } finally {
       setLoading(false);
@@ -353,6 +370,12 @@ function App() {
     }, 1000);
   };
 
+  const formatDuration = (seconds) => {
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+  return `${minutes}分${remainingSeconds}秒`;
+  };
+  
   const handleCopyTranscript = () => {
     const textToCopy = Array.isArray(transcript) 
       ? transcript.map(t => t.text).join(' ')
@@ -539,7 +562,23 @@ function App() {
                   )}
                   {error && (
                     <Alert severity="error" sx={{ mt: 2 }}>
-                      {error.includes('Cloud Faster Whisper') ? '云端 Faster Whisper 服务出错，请稍后重试' : error}
+                      <AlertTitle>{error}</AlertTitle>
+                      {errorDetails && <Typography variant="body2">{errorDetails}</Typography>}
+                      {error === '视频时长超出限制' && (
+                        <Typography variant="body2" sx={{ mt: 1 }}>
+                          请尝试使用较短的视频，或联系管理员提高时长限制。
+                        </Typography>
+                      )}
+                      {error === '下载失败' && (
+                        <Typography variant="body2" sx={{ mt: 1 }}>
+                          请检查BV号是否正确，或者该视频是否可公开访问。如果问题持续，请稍后再试。
+                        </Typography>
+                      )}
+                      {error === '转录过程中发生错误' && (
+                        <Typography variant="body2" sx={{ mt: 1 }}>
+                          转录服务可能暂时不可用。请稍后再试，如果问题持续，请联系管理员。
+                        </Typography>
+                      )}
                     </Alert>
                   )}
                 </CardContent>

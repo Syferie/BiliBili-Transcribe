@@ -1,7 +1,7 @@
 import yt_dlp
 import logging
 from .transcription_service import TranscriptionFactory
-from .utils import update_progress, validate_bv_id
+from .utils import update_progress, validate_bv_id, get_max_video_duration
 import os
 from dotenv import load_dotenv
 import retry
@@ -16,11 +16,12 @@ BILIBILI_COOKIES = os.getenv('BILIBILI_COOKIES')
 
 
 def download_bilibili_audio(bv_id):
+    duration = None
     try:
         bv_id = validate_bv_id(bv_id)
     except ValueError as e:
         update_progress(bv_id, '下载失败', str(e))
-        return None, None, None, None
+        return None, None, None, duration
 
     update_progress(bv_id, '正在获取视频信息')
     url = f"https://www.bilibili.com/video/{bv_id}"
@@ -39,6 +40,13 @@ def download_bilibili_audio(bv_id):
         try:
             update_progress(bv_id, '正在分析可用音频格式')
             meta = ydl.extract_info(url, download=False)
+            
+            # 检查视频时长
+            duration = meta.get('duration')
+            max_duration = get_max_video_duration()
+            if duration and duration > max_duration:
+                raise ValueError(f"视频时长 ({duration}秒) 超过允许的最大时长 ({max_duration}秒)")
+                
             formats = meta.get('formats', [])
             
             if not formats:
@@ -64,14 +72,14 @@ def download_bilibili_audio(bv_id):
             logging.error(f"下载失败: {str(e)}")
             logging.exception("详细错误信息:")
             update_progress(bv_id, '下载失败', str(e))
-            raise
+            raise ValueError(str(e))
         except Exception as e:
             logging.error(f"未知错误: {str(e)}")
             logging.exception("详细错误信息:")
             update_progress(bv_id, '下载失败', str(e))
             raise
 
-    return None, None, None, None
+    return None, None, None, duration
 
 def transcribe_audio(audio_filename, transcriber_type="faster_whisper"):
     logging.info(f"开始转写音频文件: {audio_filename}")
